@@ -1,7 +1,14 @@
+.venv/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
+*.pyc
+
+.DS_Store
+results/*.csv
+results/*.json
+results/*.jsonl
 
 # C extensions
 *.so
