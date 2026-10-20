@@ -1,10 +1,15 @@
+import argparse
 import asyncio
+import functools
 import time
 
 import psutil
 
-from src.client import generate
+from src import client
+from src.client import generate_with_stats
+from src.gpu_memory import get_vram_mb
 from src.metrics import (
+    RequestResult,
     TaskResult,
     save_results_csv,
     summarize_results,
@@ -16,18 +21,15 @@ from src.workload import make_test_workload
 
 def find_llama_server_process():
     for process in psutil.process_iter(
-        ["pid", "name", "cmdline"]
+        ["pid", "name"]
     ):
         try:
             name = process.info["name"] or ""
-            cmdline = process.info["cmdline"] or []
 
-            command = " ".join(cmdline)
-
-            if (
-                "llama-server" in name
-                or "llama-server" in command
-            ):
+            # Match on the executable name only: shells or
+            # scripts that launched the server also have
+            # "llama-server" in their command line.
+            if name.startswith("llama-server"):
                 return process
 
         except (
@@ -57,6 +59,10 @@ def get_process_memory_mb(process):
 
 async def monitor_memory(process, stop_event):
     peak_memory_mb = 0.0
+    peak_vram_mb = None
+    vram_scope = None
+
+    pid = process.pid if process is not None else None
 
     while not stop_event.is_set():
         memory_mb = get_process_memory_mb(process)
@@ -66,12 +72,87 @@ async def monitor_memory(process, stop_event):
             memory_mb,
         )
 
+        vram_mb, scope = get_vram_mb(pid)
+
+        if vram_mb is not None:
+            peak_vram_mb = max(
+                peak_vram_mb or 0.0,
+                vram_mb,
+            )
+            vram_scope = scope
+
         await asyncio.sleep(0.05)
 
-    return peak_memory_mb
+    return peak_memory_mb, peak_vram_mb, vram_scope
 
 
-async def run_task(task, queue_time):
+async def call_llm(
+    task,
+    step,
+    prompt,
+    max_tokens,
+    request_log,
+    experiment_start,
+):
+    start_time = time.perf_counter()
+
+    try:
+        content, stats = await generate_with_stats(
+            prompt,
+            max_tokens=max_tokens,
+        )
+
+    except Exception as e:
+        request_log.append(
+            RequestResult(
+                task_id=task.task_id,
+                workload_type=task.workload_type,
+                step=step,
+                start_time=start_time - experiment_start,
+                latency=time.perf_counter() - start_time,
+                success=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
+
+        raise
+
+    request_log.append(
+        RequestResult(
+            task_id=task.task_id,
+            workload_type=task.workload_type,
+            step=step,
+            start_time=start_time - experiment_start,
+            success=True,
+            **stats,
+        )
+    )
+
+    return content
+
+
+def request_totals(task, request_log):
+    requests = [
+        request
+        for request in request_log
+        if request.task_id == task.task_id
+    ]
+
+    return {
+        "num_requests": len(requests),
+        "output_tokens": sum(
+            request.completion_tokens or 0
+            for request in requests
+        ),
+    }
+
+
+async def run_task(
+    task,
+    queue_time,
+    request_log,
+    experiment_start,
+):
     start_time = time.perf_counter()
 
     llama_process = find_llama_server_process()
@@ -87,9 +168,13 @@ async def run_task(task, queue_time):
 
     try:
         if task.workload_type == "multistep":
-            first_response = await generate(
+            first_response = await call_llm(
+                task,
+                1,
                 task.prompt,
-                max_tokens=task.max_tokens,
+                task.max_tokens,
+                request_log,
+                experiment_start,
             )
 
             await asyncio.sleep(
@@ -103,15 +188,23 @@ async def run_task(task, queue_time):
                 "point in one sentence."
             )
 
-            await generate(
+            await call_llm(
+                task,
+                2,
                 second_prompt,
-                max_tokens=50,
+                50,
+                request_log,
+                experiment_start,
             )
 
         else:
-            await generate(
+            await call_llm(
+                task,
+                1,
                 task.prompt,
-                max_tokens=task.max_tokens,
+                task.max_tokens,
+                request_log,
+                experiment_start,
             )
 
         execution_time = (
@@ -121,7 +214,11 @@ async def run_task(task, queue_time):
 
         stop_event.set()
 
-        peak_memory_mb = await memory_monitor
+        (
+            peak_memory_mb,
+            peak_vram_mb,
+            vram_scope,
+        ) = await memory_monitor
 
         return TaskResult(
             task_id=task.task_id,
@@ -133,6 +230,9 @@ async def run_task(task, queue_time):
             ),
             peak_memory_mb=peak_memory_mb,
             success=True,
+            peak_vram_mb=peak_vram_mb,
+            vram_scope=vram_scope,
+            **request_totals(task, request_log),
         )
 
     except Exception as e:
@@ -143,7 +243,11 @@ async def run_task(task, queue_time):
 
         stop_event.set()
 
-        peak_memory_mb = await memory_monitor
+        (
+            peak_memory_mb,
+            peak_vram_mb,
+            vram_scope,
+        ) = await memory_monitor
 
         return TaskResult(
             task_id=task.task_id,
@@ -155,12 +259,27 @@ async def run_task(task, queue_time):
             ),
             peak_memory_mb=peak_memory_mb,
             success=False,
-            error=str(e),
+            error=f"{type(e).__name__}: {e}",
+            peak_vram_mb=peak_vram_mb,
+            vram_scope=vram_scope,
+            timed_out=isinstance(
+                e,
+                asyncio.TimeoutError,
+            ),
+            **request_totals(task, request_log),
         )
 
 
-async def run_experiment(concurrency, trial):
-    tasks = make_test_workload()
+async def run_experiment(
+    concurrency,
+    trial,
+    tasks_per_type,
+    context_repeats,
+):
+    tasks = make_test_workload(
+        tasks_per_type=tasks_per_type,
+        context_repeats=context_repeats,
+    )
 
     scheduler = FIFOScheduler(
         concurrency=concurrency
@@ -168,14 +287,21 @@ async def run_experiment(concurrency, trial):
 
     print(
         f"\nRunning trial {trial} "
-        f"with concurrency={concurrency}\n"
+        f"with concurrency={concurrency}, "
+        f"context_repeats={context_repeats}\n"
     )
+
+    request_log = []
 
     experiment_start = time.perf_counter()
 
     results = await scheduler.run(
         tasks,
-        run_task,
+        functools.partial(
+            run_task,
+            request_log=request_log,
+            experiment_start=experiment_start,
+        ),
     )
 
     total_time = (
@@ -190,7 +316,12 @@ async def run_experiment(concurrency, trial):
             f"exec={result.execution_time:.3f}s, "
             f"total={result.completion_time:.3f}s, "
             f"memory={result.peak_memory_mb:.1f} MB, "
+            f"vram={result.peak_vram_mb or 0:.1f} MB, "
             f"success={result.success}"
+            + (
+                f" ({result.error})"
+                if result.error else ""
+            )
         )
 
     print(
@@ -198,52 +329,110 @@ async def run_experiment(concurrency, trial):
         f"{total_time:.3f}s"
     )
 
-    output_path = (
+    output_prefix = (
         f"results/"
+        f"ctx_{context_repeats}_"
         f"concurrency_{concurrency}_"
-        f"trial_{trial}.csv"
+        f"trial_{trial}"
     )
 
     save_results_csv(
         results,
-        output_path,
+        f"{output_prefix}.csv",
+    )
+
+    save_results_csv(
+        sorted(
+            request_log,
+            key=lambda request: request.start_time,
+        ),
+        f"{output_prefix}_requests.csv",
     )
 
     print(
-        f"Saved results to {output_path}"
+        f"Saved results to {output_prefix}.csv "
+        f"and {output_prefix}_requests.csv"
     )
 
     summary = summarize_results(
         results,
         concurrency,
         total_time,
+        requests=request_log,
     )
 
     summary["trial"] = trial
+    summary["context_repeats"] = context_repeats
 
     return summary
 
 
-async def main():
-    concurrency_levels = [
-        1,
-        2,
-        4,
-        8,
-    ]
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the FIFO baseline across "
+            "concurrency levels and context sizes."
+        )
+    )
 
-    num_trials = 3
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        nargs="+",
+        default=[1, 2, 4, 8],
+    )
+
+    parser.add_argument(
+        "--trials",
+        type=int,
+        default=3,
+    )
+
+    parser.add_argument(
+        "--tasks-per-type",
+        type=int,
+        default=12,
+    )
+
+    parser.add_argument(
+        "--context-repeats",
+        type=int,
+        nargs="+",
+        default=[120],
+        help=(
+            "Sizes of the long_context prompt "
+            "(each repeat is ~32 tokens)."
+        ),
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=client.REQUEST_TIMEOUT,
+        help="Per-request timeout in seconds.",
+    )
+
+    return parser.parse_args()
+
+
+async def main():
+    args = parse_args()
+
+    client.REQUEST_TIMEOUT = args.timeout
 
     summaries = []
 
-    for concurrency in concurrency_levels:
-        for trial in range(1, num_trials + 1):
-            summary = await run_experiment(
-                concurrency,
-                trial,
-            )
+    for context_repeats in args.context_repeats:
+        for concurrency in args.concurrency:
+            for trial in range(1, args.trials + 1):
+                summary = await run_experiment(
+                    concurrency,
+                    trial,
+                    args.tasks_per_type,
+                    context_repeats,
+                )
 
-            summaries.append(summary)
+                summaries.append(summary)
 
     save_summary_csv(
         summaries,

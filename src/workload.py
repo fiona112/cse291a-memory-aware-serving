@@ -19,12 +19,17 @@ def make_short_task(task_id: str) -> Task:
     )
 
 
-def make_long_context_task(task_id: str) -> Task:
+def make_long_context_task(
+    task_id: str,
+    context_repeats: int = 120,
+) -> Task:
+    # Each repeat is ~32 tokens, so 120 repeats is
+    # ~3.9k prompt tokens with Qwen2.5's tokenizer.
     long_context = (
         f"This is background information for task {task_id}. "
         "The fictional city has parks, schools, stores, public transportation, "
         "restaurants, libraries, and residential neighborhoods. "
-        * 120
+        * context_repeats
     )
 
     prompt = (
@@ -62,12 +67,20 @@ def make_multistep_task(task_id: str) -> Task:
     )
 
 
-def make_test_workload():
+def make_test_workload(
+    tasks_per_type: int = 12,
+    context_repeats: int = 120,
+):
     tasks = []
 
-    for i in range(3):
+    for i in range(tasks_per_type):
         tasks.append(make_short_task(f"short_{i}"))
-        tasks.append(make_long_context_task(f"long_context_{i}"))
+        tasks.append(
+            make_long_context_task(
+                f"long_context_{i}",
+                context_repeats=context_repeats,
+            )
+        )
         tasks.append(make_long_output_task(f"long_output_{i}"))
         tasks.append(make_multistep_task(f"multistep_{i}"))
 
