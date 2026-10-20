@@ -1,0 +1,46 @@
+{
+  "started_at": "2026-10-20T03:25:15.413996-07:00",
+  "concurrency": [
+    1,
+    32
+  ],
+  "context_repeats": [
+    120
+  ],
+  "trials": 1,
+  "tasks_per_type": 8,
+  "request_timeout_seconds": 120.0,
+  "server": {
+    "command": [
+      "C:\\Personal\\cse291a-memory-aware-serving\\models\\llama.cpp\\llama-server.exe",
+      "-m",
+      "C:\\Personal\\cse291a-memory-aware-serving\\models\\qwen\\qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8081",
+      "-c",
+      "32768",
+      "-np",
+      "8",
+      "-ngl",
+      "99",
+      "--cache-ram",
+      "0"
+    ],
+    "version": "version: 0.7.0-dev (build 11748, commit 3bb63cbcb)\nbuilt with Clang 20.1.8 for Windows x86_64",
+    "slot_count": 8,
+    "slot_context_tokens": [
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096
+    ],
+    "cache_reset": "--cache-ram 0 and erase every slot before each trial",
+    "endpoint": "http://127.0.0.1:8081/v1/chat/completions"
+  }
+}
