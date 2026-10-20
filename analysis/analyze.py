@@ -22,7 +22,15 @@ def load_trials():
     return df
 
 
-def load_requests():
+def load_requests(trials):
+    current_trials = set(
+        zip(
+            trials["context_repeats"],
+            trials["concurrency"],
+            trials["trial"],
+        )
+    )
+
     paths = glob.glob(
         "results/ctx_*_concurrency_*_trial_*_requests.csv"
     )
@@ -35,12 +43,22 @@ def load_requests():
     for path in paths:
         name = os.path.basename(path).split("_")
 
+        context_repeats = int(name[1])
+        concurrency = int(name[3])
+        trial = int(name[5])
+
+        if (context_repeats, concurrency, trial) not in current_trials:
+            continue
+
         frame = pd.read_csv(path)
-        frame["context_repeats"] = int(name[1])
-        frame["concurrency"] = int(name[3])
-        frame["trial"] = int(name[5])
+        frame["context_repeats"] = context_repeats
+        frame["concurrency"] = concurrency
+        frame["trial"] = trial
 
         frames.append(frame)
+
+    if not frames:
+        return None
 
     return pd.concat(
         frames,
@@ -380,7 +398,7 @@ def main():
         "summary_aggregated.csv"
     )
 
-    requests = load_requests()
+    requests = load_requests(trials)
 
     if requests is not None:
         request_summary = aggregate_requests(

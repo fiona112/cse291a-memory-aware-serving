@@ -4,9 +4,9 @@ Oct 19, 2026
 
 ## Summary
 
-On a clean llama-server, FIFO throughput rises from 0.7 tasks/s at concurrency 1 to 2.4 tasks/s at concurrency 8, and c=8 is the best fixed baseline so far. All 6,912 tasks in the final run succeeded. The bottleneck is GPU decode, not memory.
+On a clean llama-server, FIFO throughput rises from 0.7 tasks/s at concurrency 1 to 2.4 tasks/s at concurrency 8, and c=8 is the best fixed baseline so far. The reported 36 trials contain 1,728 tasks (3 context sizes × 4 concurrency levels × 3 trials × 48 tasks), all reported successful. The bottleneck is GPU decode, not memory.
 
-- **What changed vs the original repo:** VRAM measurement, per-request instrumentation, tail latency (p50/p95/p99), request timeouts, a context-size sweep, CLI flags, a bigger workload (48 tasks per trial), and a fix for a process-detection bug. All changes are on branch `vram-measurement`, not yet committed.
+- **What changed vs the original repo:** VRAM measurement, per-request instrumentation, tail latency (p50/p95/p99), request timeouts, a context-size sweep, CLI flags, a bigger workload (48 tasks per trial), and a fix for a process-detection bug. These changes are on branch `vram-measurement`.
 - **Two findings that affect Phase 2:** llama.cpp preallocates the whole KV cache at startup, so VRAM does not move with concurrency. Identical prompts across trials hit the prefix cache almost 100%, so the context-size effect is currently hidden.
 - **One run had to be thrown out:** a llama-server that had been up for hours ran 2–3x slower; restarting it fixed this.
 - **Decisions needed from the team:** which AWS instance to use for final runs, how to handle the prefix cache, and whether to restart the server between trials.
@@ -66,7 +66,7 @@ Throughput grows with concurrency at every context size, with diminishing return
 | ~2,000 tokens | 0.69 | 1.35 | 2.28 | 2.52 |
 | ~3,900 tokens | 0.71 | 1.44 | 2.01 | 2.37 |
 
-Throughput in tasks/s, mean of 3 trials × 48 tasks, from `results/summary_aggregated.csv` (context sweep on a fresh server, 2026-10-19). Plot: `results/throughput_vs_concurrency.png`.
+Throughput in tasks/s, mean of 3 trials × 48 tasks, reported from a local `results/summary_aggregated.csv` (context sweep on a fresh server, 2026-10-19). Plot: `results/throughput_vs_concurrency.png`. The trial and request CSVs, and the derived aggregate CSV, are not included in this branch, so the table and plots cannot be independently regenerated from the committed files.
 
 Latency and decode time at the ~3,900-token context (other context sizes look the same):
 
@@ -90,7 +90,7 @@ No task failed or timed out in any of the 36 trials. Memory: llama-server RSS ro
 
 Four things limit how far these numbers can be trusted; the first was severe enough to invalidate a whole run.
 
-**1. A long-running llama-server slows down 2–3x.** A sweep run on a server that had been up for about 2.5 hours gave c=4 throughput of about 0.6 tasks/s and `long_output` decode of about 16 s. After a restart, the same test gave 1.2–2.1 tasks/s and 2.5–6 s decode. That run is archived in `results/run_invalid_degraded_server/` and should not be used. We ruled out power/throttling and the new VRAM polling, but the root cause is unknown. Disabling the host prompt cache (`--cache-ram 0`) made no clear difference in a short test.
+**1. A long-running llama-server slows down 2–3x.** A sweep run on a server that had been up for about 2.5 hours gave c=4 throughput of about 0.6 tasks/s and `long_output` decode of about 16 s. After a restart, the same test gave 1.2–2.1 tasks/s and 2.5–6 s decode. The invalid run's raw output is not included in this branch and should not be used. We ruled out power/throttling and the new VRAM polling, but the root cause is unknown. Disabling the host prompt cache (`--cache-ram 0`) made no clear difference in a short test.
 
 **2. The prefix cache hides the effect of context size.** The same task IDs and prompts repeat in every trial, so llama-server reuses them: `long_context` requests reused 3,903 of 3,904 prompt tokens from cache after the first trial. Context size therefore looks free. This is a benchmark artifact, not realistic agent reuse.
 
