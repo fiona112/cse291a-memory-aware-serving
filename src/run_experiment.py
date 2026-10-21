@@ -1,9 +1,17 @@
 import argparse
 import asyncio
 import functools
+import json
+import random
+import subprocess
 import time
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlsplit
+from uuid import uuid4
 
 import psutil
+import aiohttp
 
 from src import client
 from src.client import generate_with_stats
@@ -19,17 +27,137 @@ from src.scheduler import FIFOScheduler
 from src.workload import make_test_workload
 
 
+EXPECTED_SERVER_SLOTS = 8
+
+
+def server_base_url():
+    return client.LLM_URL.split("/v1/", 1)[0]
+
+
+def command_argument(arguments, names):
+    for index, argument in enumerate(arguments):
+        for name in names:
+            if argument == name and index + 1 < len(arguments):
+                return arguments[index + 1]
+            if argument.startswith(f"{name}="):
+                return argument.split("=", 1)[1]
+    return None
+
+
+def safe_server_command(arguments):
+    sensitive = {"--api-key", "--api-key-file", "--ssl-key-file"}
+    safe = []
+    redact_next = False
+    for argument in arguments:
+        if redact_next:
+            safe.append("<redacted>")
+            redact_next = False
+        elif argument in sensitive:
+            safe.append(argument)
+            redact_next = True
+        elif any(argument.startswith(f"{name}=") for name in sensitive):
+            safe.append(argument.split("=", 1)[0] + "=<redacted>")
+        else:
+            safe.append(argument)
+    return safe
+
+
+async def get_server_slots(session):
+    async with session.get(f"{server_base_url()}/slots") as response:
+        response.raise_for_status()
+        slots = await response.json()
+
+    if not isinstance(slots, list) or len(slots) != EXPECTED_SERVER_SLOTS:
+        raise RuntimeError(
+            f"Expected {EXPECTED_SERVER_SLOTS} llama-server slots; got "
+            f"{len(slots) if isinstance(slots, list) else 'an invalid response'}"
+        )
+    if any(slot.get("is_processing") for slot in slots):
+        raise RuntimeError("llama-server has busy slots; cannot start a clean trial")
+    return slots
+
+
+async def inspect_server():
+    process = find_llama_server_process()
+    if process is None:
+        raise RuntimeError("Start llama-server before running the sweep")
+
+    arguments = process.cmdline()
+    if command_argument(arguments, ("-np", "--parallel")) != str(EXPECTED_SERVER_SLOTS):
+        raise RuntimeError("Start llama-server with -np 8 for this sweep")
+    if command_argument(arguments, ("-cram", "--cache-ram")) != "0":
+        raise RuntimeError(
+            "Start llama-server with --cache-ram 0 so slot erasure "
+            "also clears reusable prompt state"
+        )
+    if command_argument(arguments, ("--slot-save-path",)) is None:
+        raise RuntimeError(
+            "Start llama-server with --slot-save-path DIR to enable slot erasure"
+        )
+
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=10)
+    ) as session:
+        slots = await get_server_slots(session)
+
+    version = None
+    try:
+        version_result = subprocess.run(
+            [process.exe(), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        version = (version_result.stdout or version_result.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired, psutil.Error):
+        pass
+
+    return {
+        "command": safe_server_command(arguments),
+        "version": version,
+        "slot_count": len(slots),
+        "slot_context_tokens": [slot.get("n_ctx") for slot in slots],
+        "cache_reset": "--cache-ram 0 and erase every slot before each trial",
+        "endpoint": client.LLM_URL,
+    }
+
+
+async def erase_server_slots():
+    erased_tokens = 0
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=30)
+    ) as session:
+        slots = await get_server_slots(session)
+        for slot in slots:
+            slot_id = slot["id"]
+            async with session.post(
+                f"{server_base_url()}/slots/{slot_id}?action=erase"
+            ) as response:
+                response.raise_for_status()
+                erased_tokens += (await response.json()).get("n_erased", 0)
+    return erased_tokens
+
+
 def find_llama_server_process():
+    server_port = str(urlsplit(client.LLM_URL).port or 80)
     for process in psutil.process_iter(
         ["pid", "name"]
     ):
         try:
             name = process.info["name"] or ""
 
-            # Match on the executable name only: shells or
-            # scripts that launched the server also have
-            # "llama-server" in their command line.
-            if name.startswith("llama-server"):
+            if not name.startswith("llama-server"):
+                continue
+
+            arguments = process.cmdline()
+            if (
+                command_argument(arguments, ("-np", "--parallel"))
+                == str(EXPECTED_SERVER_SLOTS)
+                and command_argument(arguments, ("-cram", "--cache-ram"))
+                == "0"
+                and command_argument(arguments, ("--port",)) == server_port
+            ):
                 return process
 
         except (
@@ -275,6 +403,7 @@ async def run_experiment(
     trial,
     tasks_per_type,
     context_repeats,
+    output_dir,
 ):
     tasks = make_test_workload(
         tasks_per_type=tasks_per_type,
@@ -329,8 +458,7 @@ async def run_experiment(
         f"{total_time:.3f}s"
     )
 
-    output_prefix = (
-        f"results/"
+    output_prefix = output_dir / (
         f"ctx_{context_repeats}_"
         f"concurrency_{concurrency}_"
         f"trial_{trial}"
@@ -379,13 +507,20 @@ def parse_args():
         "--concurrency",
         type=int,
         nargs="+",
-        default=[1, 2, 4, 8],
+        default=[1, 2, 4, 8, 16, 32],
     )
 
     parser.add_argument(
         "--trials",
         type=int,
         default=3,
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Seed for the reproducible trial order.",
     )
 
     parser.add_argument(
@@ -398,11 +533,23 @@ def parse_args():
         "--context-repeats",
         type=int,
         nargs="+",
-        default=[120],
+        default=[30, 60, 120],
         help=(
             "Sizes of the long_context prompt "
-            "(each repeat is ~32 tokens)."
+            "(1k/2k/4k target labels; actual token counts are recorded)."
         ),
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="New directory for this sweep (default: unique directory under results/runs).",
+    )
+
+    parser.add_argument(
+        "--server-url",
+        default=client.LLM_URL,
+        help="llama-server chat completions URL.",
     )
 
     parser.add_argument(
@@ -418,30 +565,78 @@ def parse_args():
 async def main():
     args = parse_args()
 
+    client.LLM_URL = args.server_url
     client.REQUEST_TIMEOUT = args.timeout
+    server_info = await inspect_server()
+
+    output_dir = args.output_dir or (
+        Path("results") / "runs" / (
+            datetime.now().strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + uuid4().hex[:8]
+        )
+    )
+    output_dir.mkdir(parents=True, exist_ok=False)
+    print(f"Writing this sweep to {output_dir}")
+    conditions = [
+        (context_repeats, concurrency, trial)
+        for context_repeats in args.context_repeats
+        for concurrency in args.concurrency
+        for trial in range(1, args.trials + 1)
+    ]
+    random.Random(args.seed).shuffle(conditions)
+    (output_dir / "run_config.json").write_text(
+        json.dumps(
+            {
+                "started_at": datetime.now().astimezone().isoformat(),
+                "concurrency": args.concurrency,
+                "context_repeats": args.context_repeats,
+                "trials": args.trials,
+                "seed": args.seed,
+                "condition_order": [
+                    {
+                        "context_repeats": context_repeats,
+                        "concurrency": concurrency,
+                        "trial": trial,
+                    }
+                    for context_repeats, concurrency, trial in conditions
+                ],
+                "tasks_per_type": args.tasks_per_type,
+                "request_timeout_seconds": args.timeout,
+                "server": server_info,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     summaries = []
 
-    for context_repeats in args.context_repeats:
-        for concurrency in args.concurrency:
-            for trial in range(1, args.trials + 1):
-                summary = await run_experiment(
-                    concurrency,
-                    trial,
-                    args.tasks_per_type,
-                    context_repeats,
-                )
+    for context_repeats, concurrency, trial in conditions:
+        erased_tokens = await erase_server_slots()
+        print(f"Cleared {erased_tokens} slot tokens before trial {trial}")
+        summary = await run_experiment(
+            concurrency,
+            trial,
+            args.tasks_per_type,
+            context_repeats,
+            output_dir,
+        )
 
-                summaries.append(summary)
-
-    save_summary_csv(
-        summaries,
-        "results/summary_trials.csv",
-    )
+        summary["slot_tokens_erased_before_trial"] = erased_tokens
+        summaries.append(summary)
+        save_summary_csv(
+            summaries,
+            output_dir / "summary_trials.csv",
+        )
 
     print(
         "\nSaved all trial summaries "
-        "to results/summary_trials.csv"
+        f"to {output_dir / 'summary_trials.csv'}"
+    )
+    print(
+        "Analyze with: python analysis/analyze.py "
+        f'--results-dir "{output_dir}"'
     )
 
 
