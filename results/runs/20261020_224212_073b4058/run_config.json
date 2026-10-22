@@ -1,0 +1,327 @@
+{
+  "started_at": "2026-10-20T22:42:12.718844-07:00",
+  "concurrency": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
+  "context_repeats": [
+    30,
+    60,
+    120
+  ],
+  "trials": 3,
+  "seed": 42,
+  "condition_order": [
+    {
+      "context_repeats": 120,
+      "concurrency": 2,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 2,
+      "trial": 1
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 4,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 16,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 1,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 16,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 32,
+      "trial": 2
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 16,
+      "trial": 2
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 8,
+      "trial": 2
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 8,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 8,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 2,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 8,
+      "trial": 3
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 16,
+      "trial": 2
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 32,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 2,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 1,
+      "trial": 3
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 8,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 2,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 32,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 8,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 1,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 2,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 2,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 4,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 1,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 4,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 8,
+      "trial": 2
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 1,
+      "trial": 1
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 32,
+      "trial": 3
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 32,
+      "trial": 2
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 4,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 16,
+      "trial": 1
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 1,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 16,
+      "trial": 3
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 16,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 16,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 4,
+      "trial": 1
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 32,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 1,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 8,
+      "trial": 1
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 1,
+      "trial": 2
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 2,
+      "trial": 3
+    },
+    {
+      "context_repeats": 60,
+      "concurrency": 32,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 4,
+      "trial": 2
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 4,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 4,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 16,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 32,
+      "trial": 1
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 32,
+      "trial": 3
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 8,
+      "trial": 3
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 1,
+      "trial": 2
+    },
+    {
+      "context_repeats": 30,
+      "concurrency": 4,
+      "trial": 2
+    },
+    {
+      "context_repeats": 120,
+      "concurrency": 2,
+      "trial": 2
+    }
+  ],
+  "tasks_per_type": 12,
+  "request_timeout_seconds": 120.0,
+  "server": {
+    "command": [
+      "llama-server",
+      "-hf",
+      "Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8080",
+      "-c",
+      "32768",
+      "-np",
+      "8",
+      "-ngl",
+      "99",
+      "--cache-ram",
+      "0",
+      "--slot-save-path",
+      "results/slot_cache"
+    ],
+    "version": "version: 0.7.0 (build 11669, commit 620d2225c)\nbuilt with AppleClang 21.0.0.21000334 for Darwin arm64",
+    "slot_count": 8,
+    "slot_context_tokens": [
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096,
+      4096
+    ],
+    "cache_reset": "--cache-ram 0 and erase every slot before each trial",
+    "endpoint": "http://127.0.0.1:8080/v1/chat/completions"
+  }
+}
