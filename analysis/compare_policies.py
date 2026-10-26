@@ -64,9 +64,13 @@ def load(root):
     return pd.concat(trials, ignore_index=True), pd.concat(episodes, ignore_index=True)
 
 
+QUALITY_METRICS = ["exact_match", "f1", "finished_rate"]
+
+
 def summarize(trials):
     grouped = trials.groupby(["policy", "arrival_rate"])
-    mean = grouped[METRICS].mean()
+    present = [m for m in QUALITY_METRICS if m in trials.columns]
+    mean = grouped[METRICS + present].mean()
     std = grouped[["makespan_s", "p95_completion_s"]].std().add_suffix("_std")
     count = grouped.size().rename("trials")
     return pd.concat([count, mean, std], axis=1).reset_index()
@@ -136,7 +140,7 @@ def main():
         "p95_completion_s", "p95_completion_s_std", "mean_non_tool_s",
         "computed_tokens", "return_kv_resident", "return_kv_restored",
         "return_kv_recomputed", "mean_slot_wait_s", "output_mismatches",
-    ]
+    ] + [m for m in QUALITY_METRICS if m in summary.columns]
     with pd.option_context("display.width", 250):
         print(summary[columns].round(2).to_string(index=False))
         print()

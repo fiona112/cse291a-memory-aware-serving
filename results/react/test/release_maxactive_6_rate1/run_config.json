@@ -1,0 +1,36 @@
+{
+  "started_at": "2026-10-26T08:06:13.348012-07:00",
+  "label": "release_k6",
+  "server_slots": 4,
+  "tasks": 30,
+  "task_source": {
+    "dataset": "HotpotQA distractor, validation split",
+    "url": "https://hotpotqa.github.io",
+    "license": "CC BY-SA 4.0",
+    "attribution": "Yang et al., HotpotQA, EMNLP 2018",
+    "changes": "Random sample of 60 questions (seed 42)."
+  },
+  "args": {
+    "policy": "release",
+    "tasks": "workloads/hotpotqa_tasks.json",
+    "tool_times": "workloads/tracelab_episodes.json",
+    "split": "test",
+    "server_url": "http://127.0.0.1:8090",
+    "save_dir": "C:\\Users\\kevin\\AppData\\Local\\Temp\\claude\\c--Users-kevin-OneDrive----291project\\430a2e57-2f10-4fbb-ba15-3336f930203a\\scratchpad\\slots",
+    "arrival_rate": "1.0",
+    "max_active": "6",
+    "ready_priority": "False",
+    "ttl": "1.0",
+    "tool_scale": "1.0",
+    "max_steps": "6",
+    "max_output": "160",
+    "recompute_ms": "0.14",
+    "save_ms": "0.018",
+    "restore_ms": "0.013",
+    "trials": "3",
+    "seed": "42",
+    "timeout": "300.0",
+    "output_dir": "results\\react\\test\\release_maxactive_6_rate1",
+    "shared_prefix": "0"
+  }
+}
