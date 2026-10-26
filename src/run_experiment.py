@@ -309,12 +309,25 @@ async def run_task(
                 task.tool_delay
             )
 
-            second_prompt = (
-                "Here is an earlier response:\n\n"
-                f"{first_response}\n\n"
-                "Now summarize the most important "
-                "point in one sentence."
-            )
+            if task.agent_history:
+                # Resend the whole conversation: step 2 can reuse
+                # step 1's KV only if it is still in a slot.
+                second_prompt = [
+                    {"role": "user", "content": task.prompt},
+                    {"role": "assistant", "content": first_response},
+                    {
+                        "role": "user",
+                        "content": "Now summarize the most important "
+                        "point in one sentence.",
+                    },
+                ]
+            else:
+                second_prompt = (
+                    "Here is an earlier response:\n\n"
+                    f"{first_response}\n\n"
+                    "Now summarize the most important "
+                    "point in one sentence."
+                )
 
             await call_llm(
                 task,
@@ -404,10 +417,14 @@ async def run_experiment(
     tasks_per_type,
     context_repeats,
     output_dir,
+    tool_delay=2.0,
+    agent_history=False,
 ):
     tasks = make_test_workload(
         tasks_per_type=tasks_per_type,
         context_repeats=context_repeats,
+        tool_delay=tool_delay,
+        agent_history=agent_history,
     )
 
     scheduler = FIFOScheduler(
@@ -559,6 +576,22 @@ def parse_args():
         help="Per-request timeout in seconds.",
     )
 
+    parser.add_argument(
+        "--tool-delay",
+        type=float,
+        default=2.0,
+        help="Seconds a multistep task waits between its two LLM calls.",
+    )
+
+    parser.add_argument(
+        "--agent-history",
+        action="store_true",
+        help=(
+            "Multistep tasks carry the long context and resend the whole "
+            "conversation in step 2, so step 2 can reuse step 1's KV."
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -602,6 +635,8 @@ async def main():
                     for context_repeats, concurrency, trial in conditions
                 ],
                 "tasks_per_type": args.tasks_per_type,
+                "tool_delay_seconds": args.tool_delay,
+                "agent_history": args.agent_history,
                 "request_timeout_seconds": args.timeout,
                 "server": server_info,
             },
@@ -621,8 +656,12 @@ async def main():
             args.tasks_per_type,
             context_repeats,
             output_dir,
+            tool_delay=args.tool_delay,
+            agent_history=args.agent_history,
         )
 
+        summary["tool_delay"] = args.tool_delay
+        summary["agent_history"] = args.agent_history
         summary["slot_tokens_erased_before_trial"] = erased_tokens
         summaries.append(summary)
         save_summary_csv(
