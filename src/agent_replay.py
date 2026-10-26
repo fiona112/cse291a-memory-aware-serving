@@ -362,6 +362,8 @@ def parse_args():
     parser.add_argument("--max-active", type=int, default=0,
                         help="Admit at most this many episodes at once (0 = no limit).")
     parser.add_argument("--ready-priority", action="store_true")
+    parser.add_argument("--tail-aware", action="store_true",
+                        help="min_waste: treat time already waited past the prediction as the remaining time.")
     parser.add_argument("--ttl", type=float, default=2.0, help="TTL policy: seconds.")
     parser.add_argument("--tool-scale", type=float, default=1.0,
                         help="Multiply every traced tool time by this factor.")
@@ -389,6 +391,8 @@ async def main():
     label = f"{args.policy}" + (f"_ttl{args.ttl:g}" if args.policy == "ttl" else "")
     if args.ready_priority:
         label += "_ready"
+    if args.tail_aware:
+        label += "_tail"
     if args.max_active:
         label += f"_k{args.max_active}"
     if args.tool_scale != 1.0:
@@ -442,7 +446,7 @@ async def main():
                 trial,
             )
             if args.policy == "min_waste":
-                pool.enable_reclaim(replay.reclaim, cost)
+                pool.enable_reclaim(replay.reclaim, cost, tail_aware=args.tail_aware)
             makespan = await replay.run(episodes, args.arrival_rate, args.seed + trial)
 
             for filename in replay.saved_files:

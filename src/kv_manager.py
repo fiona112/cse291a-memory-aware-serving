@@ -37,6 +37,7 @@ class AgentKV:
     disk_file: Optional[str] = None
     tool_history: list = field(default_factory=list)
     predicted_return: Optional[float] = None
+    pause_started: Optional[float] = None
     context_tokens: int = 0
 
 
@@ -64,14 +65,28 @@ class SlotPool:
         # Set by enable_reclaim(): on-demand eviction of idle agents.
         self.reclaimer = None
         self.cost_model = None
+        self.tail_aware = False
+        self.recheck = None
+        self.recheck_s = 0.25
 
-    def enable_reclaim(self, reclaimer, cost_model):
+    def enable_reclaim(self, reclaimer, cost_model, tail_aware=False):
         """
         reclaimer(agent, slot, action) is a coroutine that saves or drops
         the agent's KV and then calls release(slot).
+
+        tail_aware: once an agent has waited past its predicted tool time,
+        estimate its remaining time as the time already waited. Tool times
+        are heavy-tailed, so a call that has run long tends to keep running.
         """
         self.reclaimer = reclaimer
         self.cost_model = cost_model
+        self.tail_aware = tail_aware
+
+    def remaining_s(self, agent, now):
+        predicted = (agent.predicted_return or now) - now
+        if self.tail_aware and predicted <= 0 and agent.pause_started:
+            return now - agent.pause_started
+        return predicted
 
     def free_slots(self):
         return [s for s in self.slots if s.state == "free"]
@@ -155,10 +170,21 @@ class SlotPool:
             agent = slot.reserved_for
             if slot.state != "reserved" or agent is None:
                 continue
-            remaining = (agent.predicted_return or now) - now
+            remaining = self.remaining_s(agent, now)
             offload_s = self.cost_model.offload_s(agent.context_tokens)
             if remaining > offload_s:
                 candidates.append((remaining, slot, agent))
+
+        if self.tail_aware and len(candidates) < needed and not self.recheck:
+            # Idle agents become candidates as their wait grows, so look
+            # again shortly while someone is still waiting.
+            def recheck():
+                self.recheck = None
+                self._reclaim()
+
+            self.recheck = asyncio.get_running_loop().call_later(
+                self.recheck_s, recheck
+            )
 
         candidates.sort(key=lambda c: c[0], reverse=True)
         for _, slot, agent in candidates[:needed]:
@@ -307,7 +333,8 @@ class MinWastePolicy(Policy):
 
     def decide(self, agent, context_tokens, pool, predicted_tool_s):
         agent.context_tokens = context_tokens
-        agent.predicted_return = time.perf_counter() + predicted_tool_s
+        agent.pause_started = time.perf_counter()
+        agent.predicted_return = agent.pause_started + predicted_tool_s
         return Decision(
             "preserve",
             reason=f"predicted tool {predicted_tool_s:.2f}s",

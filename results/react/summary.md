@@ -15,6 +15,9 @@ Same setup as `results/replay` (RTX 5070 laptop, 4 slots × 4,096 tokens, Qwen2.
 | ttl 1 s | 1.7 / 20.7 | 2.4 / 20.0 | 5.8 / 22.9 | 15,265 |
 | min_waste | 2.8 / 19.1 | 4.9 / 21.0 | 3.8 / 23.5 | 13,348 |
 | min_waste + ready | 2.9 / 20.2 | 5.9 / 22.3 | 5.1 / 21.6 | 12,682 |
+| min_waste + tail + ready | — | **2.0** / 18.9 | 3.5 / 19.2 | 12,034 |
+
+The tail-aware variant (see `results/replay/summary.md`) was run afterwards at rates 2 and 4 only: it was the fastest policy at rate 2 (mean non-tool time 1.33 s vs. 1.39 s for release) and close to release at rate 4.
 
 At rate 4, release recomputed 34 of 40 returning steps per trial on average, while offload restored 35 from disk. With contexts this small, a recompute costs about as much as a restore, so both give similar latency.
 
