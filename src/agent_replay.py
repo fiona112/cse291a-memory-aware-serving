@@ -102,6 +102,7 @@ class Replay:
         self.calls = []
         self.episodes = []
         self.saved_files = []
+        self.reclaims = []
         self.admission = (
             asyncio.Semaphore(args.max_active) if args.max_active else None
         )
@@ -132,6 +133,27 @@ class Replay:
             row["kv_source"] = "recompute"
 
         slot.holder = agent.agent_id
+
+    async def reclaim(self, agent, slot, action):
+        """Called by the slot pool to evict an idle agent on demand."""
+        begin = time.perf_counter()
+        if action == "offload":
+            filename = f"{self.nonce}_{agent.agent_id}_reclaim{len(self.reclaims)}.bin"
+            await self.server.slot_action(slot.slot_id, "save", filename)
+            agent.disk_file = filename
+            self.saved_files.append(filename)
+
+        self.reclaims.append(
+            {
+                "trial": self.trial,
+                "agent": agent.agent_id,
+                "slot": slot.slot_id,
+                "action": action,
+                "save_s": time.perf_counter() - begin,
+                "context_tokens": agent.context_tokens,
+            }
+        )
+        self.pool.release(slot)
 
     async def pause(self, agent, slot, context_tokens, tool_s, row):
         predicted = self.predictor.predict(agent)
@@ -220,12 +242,12 @@ class Replay:
                     self.pool.release(slot)
                     slot.holder = None
                 else:
-                    row["tool_s"] = step["tool_seconds"]
+                    row["tool_s"] = step["tool_seconds"] * self.args.tool_scale
                     await self.pause(
                         agent,
                         slot,
                         len(history),
-                        step["tool_seconds"],
+                        row["tool_s"],
                         row,
                     )
 
@@ -236,7 +258,9 @@ class Replay:
                 self.admission.release()
 
         finished = time.perf_counter()
-        tool_total = sum(s["tool_seconds"] for s in episode["steps"])
+        tool_total = self.args.tool_scale * sum(
+            s["tool_seconds"] for s in episode["steps"]
+        )
         self.episodes.append(
             {
                 "trial": self.trial,
@@ -271,7 +295,7 @@ class Replay:
         return time.perf_counter() - self.start
 
 
-def summarize(policy_name, args, trial, makespan, episodes, calls):
+def summarize(policy_name, args, trial, makespan, episodes, calls, reclaims):
     completion = [e["completion_s"] for e in episodes]
     non_tool = [e["non_tool_s"] for e in episodes]
     pauses = [c for c in calls if c["pause_action"] != "finish"]
@@ -300,6 +324,9 @@ def summarize(policy_name, args, trial, makespan, episodes, calls):
         "pauses_preserve": actions.count("preserve"),
         "pauses_offload": actions.count("offload"),
         "pauses_release": actions.count("release"),
+        "reclaim_offload": sum(r["action"] == "offload" for r in reclaims),
+        "reclaim_release": sum(r["action"] == "release" for r in reclaims),
+        "tool_scale": args.tool_scale,
         "mean_slot_wait_s": statistics.mean(c["slot_wait_s"] for c in calls),
         "mean_decision_us": statistics.mean(
             c["decision_us"] for c in pauses
@@ -336,6 +363,8 @@ def parse_args():
                         help="Admit at most this many episodes at once (0 = no limit).")
     parser.add_argument("--ready-priority", action="store_true")
     parser.add_argument("--ttl", type=float, default=2.0, help="TTL policy: seconds.")
+    parser.add_argument("--tool-scale", type=float, default=1.0,
+                        help="Multiply every traced tool time by this factor.")
     parser.add_argument("--shared-prefix", type=int, default=512)
     parser.add_argument("--recompute-ms", type=float, default=0.14)
     parser.add_argument("--save-ms", type=float, default=0.018)
@@ -362,6 +391,8 @@ async def main():
         label += "_ready"
     if args.max_active:
         label += f"_k{args.max_active}"
+    if args.tool_scale != 1.0:
+        label += f"_tools{args.tool_scale:g}x"
     output_dir = args.output_dir or Path("results") / "replay" / (
         f"{label}_rate{args.arrival_rate:g}_"
         + datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -372,7 +403,11 @@ async def main():
     timeout = aiohttp.ClientTimeout(total=args.timeout)
     summaries = []
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # A fresh connection per request: reusing keep-alive connections that
+    # llama-server had already closed caused "Server disconnected" errors.
+    connector = aiohttp.TCPConnector(force_close=True)
+
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         server = LlamaServer(args.server_url, session)
         n_slots = await server.slot_count()
         filler_ids = await server.single_token_ids()
@@ -396,15 +431,18 @@ async def main():
             for slot_id in range(n_slots):
                 await server.slot_action(slot_id, "erase")
 
+            pool = SlotPool(n_slots, ready_priority=args.ready_priority)
             replay = Replay(
                 server,
-                SlotPool(n_slots, ready_priority=args.ready_priority),
+                pool,
                 make_policy(args.policy, cost, ttl_s=args.ttl),
                 ToolTimePredictor(),
                 filler_ids,
                 args,
                 trial,
             )
+            if args.policy == "min_waste":
+                pool.enable_reclaim(replay.reclaim, cost)
             makespan = await replay.run(episodes, args.arrival_rate, args.seed + trial)
 
             for filename in replay.saved_files:
@@ -413,10 +451,14 @@ async def main():
                 except OSError:
                     pass
 
-            summary = summarize(label, args, trial, makespan, replay.episodes, replay.calls)
+            summary = summarize(
+                label, args, trial, makespan,
+                replay.episodes, replay.calls, replay.reclaims,
+            )
             summaries.append(summary)
             write_csv(output_dir / f"trial_{trial}_calls.csv", replay.calls)
             write_csv(output_dir / f"trial_{trial}_episodes.csv", replay.episodes)
+            write_csv(output_dir / f"trial_{trial}_reclaims.csv", replay.reclaims)
             write_csv(output_dir / "summary_trials.csv", summaries)
 
             print(

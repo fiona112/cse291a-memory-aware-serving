@@ -23,10 +23,11 @@ from typing import Optional
 @dataclass
 class Slot:
     slot_id: int
-    state: str = "free"  # free | busy | reserved
+    state: str = "free"  # free | busy | reserved | reclaiming
     holder: Optional[str] = None  # agent whose KV is in this slot
     last_used: float = 0.0
     expiry: Optional[asyncio.TimerHandle] = None
+    reserved_for: Optional["AgentKV"] = None
 
 
 @dataclass
@@ -35,6 +36,8 @@ class AgentKV:
     reserved_slot: Optional[Slot] = None
     disk_file: Optional[str] = None
     tool_history: list = field(default_factory=list)
+    predicted_return: Optional[float] = None
+    context_tokens: int = 0
 
 
 @dataclass
@@ -58,6 +61,17 @@ class SlotPool:
         self.aging_s = aging_s
         self.waiters = []
         self.sequence = itertools.count()
+        # Set by enable_reclaim(): on-demand eviction of idle agents.
+        self.reclaimer = None
+        self.cost_model = None
+
+    def enable_reclaim(self, reclaimer, cost_model):
+        """
+        reclaimer(agent, slot, action) is a coroutine that saves or drops
+        the agent's KV and then calls release(slot).
+        """
+        self.reclaimer = reclaimer
+        self.cost_model = cost_model
 
     def free_slots(self):
         return [s for s in self.slots if s.state == "free"]
@@ -75,6 +89,7 @@ class SlotPool:
         if agent.reserved_slot is not None:
             slot = agent.reserved_slot
             agent.reserved_slot = None
+            slot.reserved_for = None
             if slot.expiry:
                 slot.expiry.cancel()
                 slot.expiry = None
@@ -118,13 +133,61 @@ class SlotPool:
             slot.state = "busy"
             future.set_result(slot)
 
+        self._reclaim()
+
+    def _reclaim(self):
+        """
+        If agents are waiting and no slot is free, evict idle agents whose
+        tools are predicted to run longest, as long as their remaining
+        wait is longer than what offloading costs.
+        """
+        if not self.reclaimer or self.free_slots():
+            return
+
+        in_progress = sum(s.state == "reclaiming" for s in self.slots)
+        needed = len(self.waiters) - in_progress
+        if needed <= 0:
+            return
+
+        now = time.perf_counter()
+        candidates = []
+        for slot in self.slots:
+            agent = slot.reserved_for
+            if slot.state != "reserved" or agent is None:
+                continue
+            remaining = (agent.predicted_return or now) - now
+            offload_s = self.cost_model.offload_s(agent.context_tokens)
+            if remaining > offload_s:
+                candidates.append((remaining, slot, agent))
+
+        candidates.sort(key=lambda c: c[0], reverse=True)
+        for _, slot, agent in candidates[:needed]:
+            slot.state = "reclaiming"
+            slot.reserved_for = None
+            agent.reserved_slot = None
+            if slot.expiry:
+                slot.expiry.cancel()
+                slot.expiry = None
+
+            tokens = agent.context_tokens
+            action = (
+                "offload"
+                if self.cost_model.offload_s(tokens) < self.cost_model.recompute_s(tokens)
+                else "release"
+            )
+            asyncio.get_running_loop().create_task(
+                self.reclaimer(agent, slot, action)
+            )
+
     def release(self, slot):
         slot.state = "free"
+        slot.reserved_for = None
         slot.last_used = time.perf_counter()
         self._dispatch()
 
     def reserve(self, agent, slot, ttl=None):
         slot.state = "reserved"
+        slot.reserved_for = agent
         agent.reserved_slot = slot
 
         if ttl is not None:
@@ -135,6 +198,8 @@ class SlotPool:
                     self.release(slot)
 
             slot.expiry = asyncio.get_running_loop().call_later(ttl, expire)
+
+        self._reclaim()
 
 
 class CostModel:
@@ -227,10 +292,12 @@ class TTLPolicy(Policy):
 
 class MinWastePolicy(Policy):
     """
-    InferCept-style min-waste choice, in slot-seconds that other agents
-    lose. Holding a slot only wastes time if someone needs it; offloading
-    costs the save and restore I/O; releasing costs a recompute when the
-    agent returns, if its slot was taken in the meantime.
+    InferCept-style min-waste, applied on demand. Holding an idle agent's
+    KV wastes nothing until another agent needs the slot, so every pause
+    starts as preserve. When a slot is needed and none is free, the pool
+    (SlotPool._reclaim) evicts the idle agent with the longest predicted
+    remaining tool time, if that time exceeds the offload cost, and uses
+    whichever of offload or release costs less.
     """
 
     name = "min_waste"
@@ -239,31 +306,12 @@ class MinWastePolicy(Policy):
         self.cost = cost_model
 
     def decide(self, agent, context_tokens, pool, predicted_tool_s):
-        # Other agents need a slot now or soon: this slot is the one
-        # being released, so pressure exists if anyone is waiting or no
-        # other slot is free.
-        pressure = pool.waiting() > 0 or len(pool.free_slots()) == 0
-
-        if not pressure:
-            return Decision("preserve", reason="no pressure")
-
-        costs = {
-            "preserve": predicted_tool_s,
-            "offload": self.cost.offload_s(context_tokens),
-            "release": self.cost.recompute_s(context_tokens),
-        }
-        action = min(costs, key=costs.get)
-        reason = ", ".join(f"{k}={v:.3f}s" for k, v in costs.items())
-
-        if action == "preserve":
-            # Bound the bet: if the tool runs long, stop holding the slot.
-            return Decision(
-                "preserve",
-                ttl=max(costs["offload"], 2 * predicted_tool_s),
-                reason=reason,
-            )
-
-        return Decision(action, reason=reason)
+        agent.context_tokens = context_tokens
+        agent.predicted_return = time.perf_counter() + predicted_tool_s
+        return Decision(
+            "preserve",
+            reason=f"predicted tool {predicted_tool_s:.2f}s",
+        )
 
 
 def make_policy(name, cost_model, ttl_s=2.0):
