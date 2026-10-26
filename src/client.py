@@ -18,17 +18,25 @@ async def generate_with_stats(
     """
     Sends one chat request and returns (content, stats).
 
+    prompt is either a single user message or a full list
+    of chat messages (for agents that resend their history).
+
     stats holds per-request measurements: wall-clock
     latency plus the token counts and prefill/decode
     timings that llama-server reports in its response.
     """
-    payload = {
-        "messages": [
+    if isinstance(prompt, str):
+        messages = [
             {
                 "role": "user",
                 "content": prompt,
             }
-        ],
+        ]
+    else:
+        messages = prompt
+
+    payload = {
+        "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0,
     }
