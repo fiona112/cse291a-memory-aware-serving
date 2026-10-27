@@ -15,6 +15,63 @@ On replayed real agent traces (TraceLab) with a constrained KV budget, held-out 
 
 All numbers are from one laptop GPU; final runs on AWS are still to do.
 
+## The project in plain language
+
+### What a KV cache is
+
+When the model reads text, it stores the computed result for every token. That store is the **KV cache**. When a conversation continues, the model reuses it and only computes the new tokens instead of rereading everything.
+
+An agent works in a loop: **think → call a tool → wait for the result → think again**, and it sends its whole conversation history at every step. If its KV cache is still there, each step only computes a small new piece. If the cache is gone, the agent must recompute the entire conversation from scratch.
+
+### The research question
+
+> What should happen to an agent's KV cache while it waits for a tool to return?
+
+While an agent waits for a tool (searching the web, running code), it does not need the GPU, but its KV cache still occupies a slot. There are three options:
+
+| Option | Benefit | Cost |
+| --- | --- | --- |
+| **Keep** it in the GPU slot | Ready the moment the agent returns | Holds the slot, so others have to wait |
+| **Let it go**, recompute if overwritten | The slot is free for others right away | Recomputing the whole conversation is slow |
+| **Save to disk**, restore on return | The slot is free for others | Saving and restoring take time, but much less than recomputing |
+
+No option is always best, so the question is how to choose based on the situation.
+
+### What we did, step by step
+
+**1. Phase 1: show the problem exists**
+- llama-server reserves all of its KV memory at startup, so memory usage never changes with load. The original idea of adjusting concurrency based on memory usage therefore had no signal to work with.
+- Experiments showed that when an agent leaves to wait for a tool, other requests often take its slot and overwrite its KV, so the agent must recompute everything when it returns. The more tasks run at once and the longer the tool takes, the more likely this is.
+
+**2. Build a realistic test environment**
+- **TraceLab:** recorded sessions of real people using Claude Code and Codex, including how long each step was and how long each tool took. We replay agents from these records so the experiments resemble real usage, which the professor asked for.
+- **HotpotQA agent:** an agent that actually decides what to search for and then answers. It checks that the results hold in a real application and that answer quality does not change.
+
+**3. Compare seven approaches**
+- **llama-server default:** let the KV go and get overwritten.
+- **Keep everything:** always hold the slot.
+- **Save everything to disk:** save at every tool call.
+- **Continuum's TTL:** a published method that keeps the KV for a fixed number of seconds, then lets it go.
+- **Limit concurrency (K = 6):** admit at most 6 agents at once, the best "tuned fixed setting".
+- **Our method**, below.
+
+**4. Our method**
+
+> Keep the KV by default. Only when someone cannot get a slot, save the agent that is expected to be away longest to disk.
+
+- **Keep it when nobody is waiting.** Holding the slot costs nobody anything and lets the agent continue immediately, so there is no reason to give it up.
+- **Act only when someone is waiting for a slot.** Only then does holding a slot have a cost.
+- **Pick the agent expected to be away longest.** Save its KV to disk and free its slot. Agents expected back soon keep their slots, which avoids saving a KV only to restore it a moment later.
+
+> The longer a tool has already run, the longer it is likely to keep running (a heavy-tailed distribution).
+
+This is the key part of the method. Tool times are heavy-tailed: **most calls are fast (median 0.25 s), but a few are very long (up to minutes)**.
+
+- **The problem with the first version:** it predicted the remaining wait from an average. The average is short, so an agent stuck in a long tool call kept being treated as "about to return", and its slot was never freed.
+- **The fix:** if an agent has already waited longer than predicted, it is probably one of the rare very long calls, so the time it has already waited is used as the estimate of the time it still has to wait. The longer it waits, the stronger the case for saving it to disk.
+
+**Analogy:** a diner steps away from the table to take a phone call. Right after they leave, the table is held for them, since most people come back quickly. But if they have been gone for 10 minutes, they will probably be gone a while longer. If people are waiting in line, the staff pack up the diner's things and give the table to the next party, then set the things back out when the diner returns.
+
 ## 1. Why we changed direction
 
 The original plan was **adaptive concurrency**: lower the number of concurrent tasks when memory usage is high. Two things changed that.
