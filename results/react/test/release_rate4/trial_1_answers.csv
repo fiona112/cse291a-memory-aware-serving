@@ -1,0 +1,31 @@
+trial,task_id,answer,gold,finished,exact_match,f1
+1,hq007,Love and Theft,Love and Theft,True,1.0,1.0
+1,hq011,No,no,True,1.0,1.0
+1,hq003,Creature Comforts,Creature Comforts,True,1.0,1.0
+1,hq013,Tara Strong,Teen Titans Go!,True,0.0,0.0
+1,hq015,2010,Pulitzer Prize,True,0.0,0.0
+1,hq019,Liberty Bank Stadium,Sam Boyd Stadium,True,0.0,0.3333333333333333
+1,hq009,Hamlet,Tybalt,True,0.0,0.0
+1,hq017,Hilo,Hawaii County,True,0.0,0.0
+1,hq029,Terminal 2 of Dubai International Airport,Dubai International Airport,True,0.0,0.6666666666666666
+1,hq021,1926,10 January 1920,True,0.0,0.0
+1,hq035,Arun Date,Shukratara,True,0.0,0.0
+1,hq039,John Sargent Sr. First Novel Prize,The Bad Hemingway Contest,True,0.0,0.0
+1,hq037,Michael Kelly,Frederick Alexander,True,0.0,0.0
+1,hq041,Stone Brewing Co.,Stone Brewing,True,0.0,0.8
+1,hq043,LAX,Baudot code,True,0.0,0.0
+1,hq047,Stedelijk Museum Amsterdam,Stedelijk Museum Amsterdam,True,1.0,1.0
+1,hq053,The Clash of Triton,To SquarePants or Not to SquarePants,True,0.0,0.0
+1,hq057,Empire Distribution,"San Francisco, California",True,0.0,0.0
+1,hq033,Shape magazine,Velvetpark,True,0.0,0.0
+1,hq055,Bob Bailey,Matthew Ryan Kemp,True,0.0,0.0
+1,hq051,Cannes Film Festival,69th Cannes Film Festival,True,0.0,0.8571428571428571
+1,hq059,Romano-British culture,Roman,True,0.0,0.0
+1,hq001,Pete Doherty,"Jonny"" Craig",True,0.0,0.0
+1,hq049,Tricia Helfer,Sarah Kerrigan,True,0.0,0.0
+1,hq031,,1927,False,0.0,0.0
+1,hq023,M. Night Shyamalan,M. Night Shyamalan,True,1.0,1.0
+1,hq027,William Shakespeare,chronological collection of critical quotations,True,0.0,0.0
+1,hq025,Edinburgh Waverley railway station,London,True,0.0,0.0
+1,hq045,Canada,Mark Masons' Hall,True,0.0,0.0
+1,hq005,"Indian general election, 1996",a failed coup attempt,True,0.0,0.0

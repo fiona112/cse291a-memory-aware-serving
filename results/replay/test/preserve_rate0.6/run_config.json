@@ -1,0 +1,33 @@
+{
+  "started_at": "2026-10-26T04:36:41.730151-07:00",
+  "label": "preserve",
+  "server_slots": 4,
+  "episodes": 20,
+  "workload_source": {
+    "dataset": "TraceLab public coding-agent trace (v0.0.2)",
+    "url": "https://tracelab.cs.washington.edu",
+    "license": "CC BY 4.0",
+    "attribution": "TraceLab (SyFI Lab, University of Washington)",
+    "changes": "Sampled episodes, truncated to the first rounds, token counts and output lengths scaled, tool time capped; see parameters."
+  },
+  "args": {
+    "policy": "preserve",
+    "workload": "workloads/tracelab_episodes.json",
+    "split": "test",
+    "server_url": "http://127.0.0.1:8090",
+    "save_dir": "C:\\Users\\kevin\\AppData\\Local\\Temp\\claude\\c--Users-kevin-OneDrive----291project\\430a2e57-2f10-4fbb-ba15-3336f930203a\\scratchpad\\slots",
+    "arrival_rate": "0.6",
+    "max_active": "0",
+    "ready_priority": "False",
+    "ttl": "2.0",
+    "tool_scale": "1.0",
+    "shared_prefix": "512",
+    "recompute_ms": "0.14",
+    "save_ms": "0.018",
+    "restore_ms": "0.013",
+    "trials": "5",
+    "seed": "42",
+    "timeout": "300.0",
+    "output_dir": "results\\replay\\test\\preserve_rate0.6"
+  }
+}
