@@ -108,5 +108,5 @@ Test split, rate 0.6, 3 trials, same session per condition. Change in mean non-t
 | 4 slots, half the model on CPU (`-ngl 14`) | −41% [−43%, −39%] | −48% [−52%, −45%] |
 
 - **Gains grow with the cost of recomputing.** With half the model on CPU, prefill is slower and release's recomputes dominate (non-tool time 170 s vs. 88 s for ours).
-- **Gains peak at moderate memory pressure.** With 8 slots there is less contention, so less to fix; with 2 slots all policies are queue-bound and the gain shrinks again.
+- **Gains shrink when memory pressure is low.** With 8 slots there is less contention, so less to fix (−16% vs. −35% at 4 slots, CIs do not overlap). The 2-slot gain (−29%) is not significantly different from the 4-slot gain (CIs overlap), so we cannot claim a peak at moderate pressure.
 - **Shorter tools make keeping KV more valuable**, because agents return before their slot is needed and preserving costs little.
