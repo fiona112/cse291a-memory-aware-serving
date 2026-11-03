@@ -1,0 +1,31 @@
+trial,task_id,answer,gold,finished,exact_match,f1
+1,hq003,Creature Comforts,Creature Comforts,True,1.0,1.0
+1,hq007,Rascal Flatts,Love and Theft,True,0.0,0.0
+1,hq001,Jonny Craig,"Jonny"" Craig",True,1.0,1.0
+1,hq011,No,no,True,1.0,1.0
+1,hq013,Tara Strong,Teen Titans Go!,True,0.0,0.0
+1,hq009,Romeo,Tybalt,True,0.0,0.0
+1,hq015,The Pulitzer Prize in General Nonfiction,Pulitzer Prize,True,0.0,0.5714285714285715
+1,hq017,"Hilo Bay, Hawaii: Hilo Bay is a bay on the island of Hawaii in Hawaii County, Hawaii, United States. It is located at 18°45′30″N 155°29′30″W, and is part of the Hilo Micropolitan Statistical Area. It is located on the west side of the island of Hawaii, and is the largest bay on the island. It is also the largest bay on the Big Island of Hawaii. It is located at (18.7583333, -155.4861111). It is located on the west side of the island of Hawaii, and is the largest bay on the island. It is also the largest bay on the",Hawaii County,False,0.0,0.04597701149425288
+1,hq029,Terminal 2 of Dubai International Airport,Dubai International Airport,True,0.0,0.6666666666666666
+1,hq021,League of Nations,10 January 1920,True,0.0,0.0
+1,hq019,Liberty Bank Stadium,Sam Boyd Stadium,True,0.0,0.3333333333333333
+1,hq035,2015,Shukratara,True,0.0,0.0
+1,hq037,Frederick Lindemann,Frederick Alexander,True,0.0,0.5
+1,hq039,The International Imitation Hemingway Competition,The Bad Hemingway Contest,True,0.0,0.28571428571428575
+1,hq041,Stone Brewing Co.,Stone Brewing,True,0.0,0.8
+1,hq031,Patti Page was born in 1927.,1927,True,0.0,0.2857142857142857
+1,hq043,X&Y,Baudot code,True,0.0,0.0
+1,hq053,To SquarePants or Not to SquarePants,To SquarePants or Not to SquarePants,True,1.0,1.0
+1,hq049,Tricia Helfer,Sarah Kerrigan,True,0.0,0.0
+1,hq047,Museum of Contemporary Art: The Museum of Contemporary Art,Stedelijk Museum Amsterdam,False,0.0,0.18181818181818182
+1,hq057,Empire Distribution,"San Francisco, California",True,0.0,0.0
+1,hq055,Matt Kemp,Matthew Ryan Kemp,True,0.0,0.4
+1,hq033,Shape magazine,Velvetpark,True,0.0,0.0
+1,hq051,2016 Cannes Film Festival,69th Cannes Film Festival,True,0.0,0.75
+1,hq059,The Roman conquest of Britain began in AD 43,Roman,True,0.0,0.2222222222222222
+1,hq023,M. Night Shyamalan,M. Night Shyamalan,True,1.0,1.0
+1,hq027,William Shakespeare,chronological collection of critical quotations,True,0.0,0.0
+1,hq025,,London,False,0.0,0.0
+1,hq005,Engelbert Dollfuss,a failed coup attempt,True,0.0,0.0
+1,hq045,St James's Palace,Mark Masons' Hall,True,0.0,0.0

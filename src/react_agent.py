@@ -226,7 +226,13 @@ class ReactReplay(Replay):
 
                 # Run the real tool, then wait out the rest of a realistic delay.
                 begin = time.perf_counter()
-                observation = search(task["paragraphs"], action.group(2), shown)
+                observation = search(
+                    task["paragraphs"],
+                    action.group(2),
+                    shown,
+                    top_k=self.args.top_k,
+                    max_words=self.args.max_words,
+                )
                 search_s = time.perf_counter() - begin
                 delay = random.Random(f"{task['task_id']}-{index}").choice(self.tool_delays)
                 tool_s = (search_s + delay) * self.args.tool_scale
@@ -293,6 +299,10 @@ def parse_args():
     parser.add_argument("--tool-scale", type=float, default=1.0)
     parser.add_argument("--max-steps", type=int, default=6)
     parser.add_argument("--max-output", type=int, default=160)
+    parser.add_argument("--top-k", type=int, default=2,
+                        help="Paragraphs returned per search (10 = a full results page).")
+    parser.add_argument("--max-words", type=int, default=150,
+                        help="Words kept per returned paragraph.")
     parser.add_argument("--recompute-ms", type=float, default=0.14)
     parser.add_argument("--save-ms", type=float, default=0.018)
     parser.add_argument("--restore-ms", type=float, default=0.013)
@@ -326,6 +336,8 @@ async def main():
         label += "_ready"
     if args.tail_aware:
         label += "_tail"
+    if args.top_k != 2 or args.max_words != 150:
+        label += f"_top{args.top_k}x{args.max_words}w"
     if args.max_active:
         label += f"_k{args.max_active}"
     output_dir = args.output_dir or Path("results") / "react" / (
