@@ -1,0 +1,31 @@
+trial,task_id,answer,gold,finished,exact_match,f1
+2,hq003,Creature Comforts,Creature Comforts,True,1.0,1.0
+2,hq007,Rascal Flatts,Love and Theft,True,0.0,0.0
+2,hq011,No,no,True,1.0,1.0
+2,hq013,Tara Strong,Teen Titans Go!,True,0.0,0.0
+2,hq019,UNLV Rebels football team,Sam Boyd Stadium,True,0.0,0.0
+2,hq001,Jonny Craig,"Jonny"" Craig",True,1.0,1.0
+2,hq017,"Hilo, Hawaii",Hawaii County,True,0.0,0.5
+2,hq015,2011 Pulitzer Prize in General Nonfiction,Pulitzer Prize,True,0.0,0.5
+2,hq009,Romeo Montague,Tybalt,True,0.0,0.0
+2,hq021,League of Nations,10 January 1920,True,0.0,0.0
+2,hq029,Terminal 2 of Dubai International Airport,Dubai International Airport,True,0.0,0.6666666666666666
+2,hq035,19/6/2015,Shukratara,True,0.0,0.0
+2,hq039,The International Imitation Hemingway Competition,The Bad Hemingway Contest,True,0.0,0.28571428571428575
+2,hq037,Frederick Lindemann,Frederick Alexander,True,0.0,0.5
+2,hq043,X&Y,Baudot code,True,0.0,0.0
+2,hq041,Stone Brewing Co.,Stone Brewing,True,0.0,0.8
+2,hq031,Patti Page,1927,True,0.0,0.0
+2,hq049,Tricia Helfer,Sarah Kerrigan,True,0.0,0.0
+2,hq033,Shape magazine,Velvetpark,True,0.0,0.0
+2,hq053,To SquarePants or Not to SquarePants,To SquarePants or Not to SquarePants,True,1.0,1.0
+2,hq057,Empire Distribution,"San Francisco, California",True,0.0,0.0
+2,hq055,Matt Kemp,Matthew Ryan Kemp,True,0.0,0.4
+2,hq051,2016 Cannes Film Festival,69th Cannes Film Festival,True,0.0,0.75
+2,hq047,"Museum of Contemporary Art: The Museum of Contemporary Art (MOCA) is an American museum of contemporary art located in Los Angeles, California. It was founded in 1967 by the Los Angeles County Museum of Art, and is one of the world's largest",Stedelijk Museum Amsterdam,False,0.0,0.048780487804878044
+2,hq059,Togodumnus,Roman,True,0.0,0.0
+2,hq023,M. Night Shyamalan,M. Night Shyamalan,True,1.0,1.0
+2,hq027,plays,chronological collection of critical quotations,True,0.0,0.0
+2,hq025,,London,False,0.0,0.0
+2,hq045,St James's Palace,Mark Masons' Hall,True,0.0,0.0
+2,hq005,Engelbert Dollfuss,a failed coup attempt,True,0.0,0.0

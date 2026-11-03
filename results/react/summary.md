@@ -37,3 +37,25 @@ Answers differ between runs even at temperature 0, because batched GPU arithmeti
 - The 1.5B model is a weak HotpotQA agent (EM ≈ 0.17). That is fine for a systems comparison, but the low accuracy limits what the quality check can detect.
 - Search returning the top 2 paragraphs (up to 150 words each) instead of 1 raised exact match from 0.03 to about 0.17 in a smoke test, and made contexts closer to real tool outputs.
 - Memory pressure only appears at high load (≥ 2 questions per second with 4 slots); at rate 0.6 no agent ever waited for a slot.
+
+## Larger search results (full results page)
+
+To test whether larger contexts make KV retention pay off for a real agent, search returned all 10 paragraphs (up to 400 words each, about 1.2k tokens per search; `--top-k 10 --max-words 400`, 16k-token slots). Results: `results/react/test_page/`, 3 trials per cell, CIs from `analysis/significance.py`.
+
+| Rate (questions/s) | Release non-tool (s) | Offload vs. release | Ours vs. release | TTL 1 s vs. release |
+| --- | --- | --- | --- | --- |
+| 1 | 1.68 | +6% (n.s.) | 0% (n.s.) | +10% (n.s.) |
+| 2 | 2.19 | +35% [+25%, +48%] | +52% [+40%, +64%] | +97% [+78%, +116%] |
+| 4 | 4.89 | **−20%** [−28%, −11%] | −2% (n.s.) | +25% [+16%, +34%] |
+
+**KV retention does not pay off for this agent, and the reason is measurable.** What a KV policy can save is the reusable context of a returning step, while the newly appended tokens must be computed anyway:
+
+| Workload | Reusable context per returning step (median) | New tokens per step (median) | Reusable ÷ new | LLM calls per episode |
+| --- | --- | --- | --- | --- |
+| TraceLab replay (test) | 2,417 | 17 | 18.7x | 11.6 |
+| ReAct, 2 paragraphs | 359 | 258 | 1.9x | 2.4 |
+| ReAct, full page | 354 | 1,373 | 0.4x | 2.1 |
+
+Larger search results grew the *new* tokens, not the reusable history, and episodes end after about two calls. Recomputing ~350 tokens costs about 50 ms, so holding or saving slots only adds waiting and I/O. Real coding agents (TraceLab) are the opposite: long, slowly growing histories over many steps, where retention avoids most of the work. The benefit of a KV policy is therefore governed by the reusable-to-new ratio and the number of steps, not by context size alone.
+
+Answer quality was unchanged (exact match 0.12–0.16 under every policy).

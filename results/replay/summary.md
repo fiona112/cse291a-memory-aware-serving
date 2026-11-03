@@ -69,3 +69,44 @@ Finding 5 pointed to the predictor: TraceLab tool times are heavy-tailed, so a c
 - One laptop GPU; recompute is cheap here (~0.14 ms/token). On slower machines (teammates' runs showed 5–10x slower prefill) avoiding recompute should matter more.
 - Dev and test splits are only 20 episodes each, and tool times are heavy-tailed, so the splits differ a lot. Conclusions about tuned parameters (K, TTL) are fragile.
 - Disk save/restore was measured warm (OS file cache); a cold SSD read will be slower.
+
+## Statistical confidence (bootstrap)
+
+Episodes are paired across policies by (trial, episode) because every policy replays the same episodes with the same arrival seed. 95% bootstrap CIs on the paired difference in mean non-tool time (`analysis/significance.py`):
+
+| Comparison | Rate 0.3 | Rate 0.6 |
+| --- | --- | --- |
+| Ours vs. release | −33% [−38%, −28%] | −31% [−37%, −25%] |
+| Ours vs. offload (same session) | −17% [−20%, −14%] | −13% [−18%, −8%] |
+| TTL 1 s vs. release | +2% [−6%, +10%] (n.s.) | −3% [−11%, +6%] (n.s.) |
+
+Files: `test/significance_vs_release.csv`, `tail_test/significance_vs_offload.csv`.
+
+## Why tail-aware reclaim works (`analysis/explain_tail.py`, `tail_explanation.csv`)
+
+Tool calls of 5–30 s are 17% of pauses but 84% of all tool time, and the moving-average predictor underestimated 63% of them by more than 2x (median predicted 4.0 s vs. actual 22.0 s). Tail-aware reclaim moves evictions to the right agents:
+
+| | Rate 0.3: v1 → tail | Rate 0.6: v1 → tail |
+| --- | --- | --- |
+| Long calls (5–30 s) whose slot was reclaimed | 54% → 66% | 55% → 67% |
+| Short calls (< 1 s) whose slot was reclaimed | 42% → 28% | 58% → 54% |
+| Mean slot wait of other agents | 0.39 → 0.13 s | 1.17 → 0.55 s |
+| Mean non-tool time | 11.5 → 9.8 s | 21.3 → 15.4 s |
+
+## Where the policy helps (boundary study, `boundary/`)
+
+Test split, rate 0.6, 3 trials, same session per condition. Change in mean non-tool time vs. release, 95% CI; all differences are significant.
+
+![Boundary summary](boundary/boundary_summary.png)
+
+| Condition | Offload | Ours |
+| --- | --- | --- |
+| 2 slots (8,192 tokens) | −9% [−10%, −7%] | −29% [−35%, −23%] |
+| 4 slots | −23% [−26%, −19%] | −35% [−43%, −28%] |
+| 8 slots | −9% [−12%, −6%] | −16% [−20%, −12%] |
+| 4 slots, tool times × 0.3 | −21% [−24%, −17%] | −42% [−47%, −37%] |
+| 4 slots, half the model on CPU (`-ngl 14`) | −41% [−43%, −39%] | −48% [−52%, −45%] |
+
+- **Gains grow with the cost of recomputing.** With half the model on CPU, prefill is slower and release's recomputes dominate (non-tool time 170 s vs. 88 s for ours).
+- **Gains peak at moderate memory pressure.** With 8 slots there is less contention, so less to fix; with 2 slots all policies are queue-bound and the gain shrinks again.
+- **Shorter tools make keeping KV more valuable**, because agents return before their slot is needed and preserving costs little.
